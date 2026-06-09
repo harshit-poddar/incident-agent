@@ -8,3 +8,4 @@ venv/
 *.egg-info/
 fixtures/*.json
 .claude/
+CLAUDE.md
