@@ -33,3 +33,21 @@ def test_dashboard_drives_real_api():
     done = client.post(f"/incidents/{inc['id']}/approve", json={"approved": True}).json()
     assert done["status"] == "resolved"
     assert client.get("/telemetry/gpu").json()[0]["vram_total_gb"] == 192.0
+
+
+def test_reset_clears_incidents():
+    client.post(
+        "/incidents",
+        json={
+            "service": "payments-api",
+            "metric": "error_rate",
+            "value": 0.38,
+            "threshold": 0.02,
+            "message": "x",
+        },
+    )
+    assert len(client.get("/incidents").json()) > 0
+    r = client.delete("/incidents")
+    assert r.status_code == 200
+    assert r.json()["cleared"] >= 1
+    assert client.get("/incidents").json() == []

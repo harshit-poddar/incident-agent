@@ -76,7 +76,10 @@
     <h1>AGENTS_026 · Autonomous Incident Agent</h1>
     <div class="sub">detect → diagnose → plan → <b>human approval</b> → remediate → verify</div>
   </div>
-  <button class="btn-primary" id="trigger" onclick="triggerIncident()">⚡ Trigger incident</button>
+  <div style="display:flex;gap:10px">
+    <button class="btn-primary" id="trigger" onclick="triggerIncident()">⚡ Trigger incident</button>
+    <button id="reset" onclick="resetDemo()" style="background:var(--panel2);color:var(--mut);border:1px solid var(--line)">↺ Reset</button>
+  </div>
 </header>
 
 <div class="wrap">
@@ -229,6 +232,17 @@ async function decide(approved){
   const s = await api("POST", `/incidents/${current}/approve`,
     {approved, approver:"manager", reason: approved?"approved in demo":"rejected in demo"});
   render(s);
+}
+
+async function resetDemo(){
+  await api("DELETE", "/incidents");
+  current = null;
+  document.getElementById("incid").textContent = "";
+  renderPipe("");
+  document.getElementById("gate").classList.remove("show");
+  document.getElementById("agents").innerHTML = '<div class="empty">No incident yet — click “Trigger incident”.</div>';
+  document.getElementById("audit").innerHTML = '<div class="empty">—</div>';
+  document.getElementById("svc").innerHTML = '<div class="empty">—</div>';
 }
 
 async function pollGpu(){

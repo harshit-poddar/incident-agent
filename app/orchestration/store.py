@@ -23,6 +23,9 @@ class IncidentStore(Protocol):
     def list_ids(self) -> list[str]:
         ...
 
+    def clear(self) -> int:
+        ...
+
 
 class InMemoryIncidentStore:
     """Default store: a dict. Zero dependencies, perfect for tests and CPU dev.
@@ -43,6 +46,11 @@ class InMemoryIncidentStore:
 
     def list_ids(self) -> list[str]:
         return list(self._by_id.keys())
+
+    def clear(self) -> int:
+        n = len(self._by_id)
+        self._by_id.clear()
+        return n
 
 
 def get_incident_store() -> IncidentStore:

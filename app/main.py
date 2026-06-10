@@ -109,6 +109,13 @@ def list_incidents() -> list[str]:
     return _STORE.list_ids()
 
 
+@app.delete("/incidents")
+def reset_incidents() -> dict:
+    """Clear all incidents -- lets the demo be re-run from a clean slate."""
+    cleared = _STORE.clear()
+    return {"cleared": cleared}
+
+
 @app.get("/telemetry/gpu")
 def gpu_telemetry() -> list[GpuMetrics]:
     """The MI300X self-monitor: the agent reporting on the hardware it runs on."""

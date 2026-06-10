@@ -65,3 +65,10 @@ class PostgresIncidentStore:
                 "SELECT id FROM incidents ORDER BY updated_at DESC"
             ).fetchall()
         return [r[0] for r in rows]
+
+    def clear(self) -> int:
+        with self._psycopg.connect(self._dsn) as conn:
+            n = conn.execute("SELECT count(*) FROM incidents").fetchone()[0]
+            conn.execute("DELETE FROM incidents")
+            conn.commit()
+        return int(n)
