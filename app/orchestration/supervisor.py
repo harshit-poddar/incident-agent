@@ -17,7 +17,12 @@ ApprovalProvider = Callable[[IncidentState], ApprovalDecision]
 
 class Supervisor:
     """Coordinates the agent graph:
-    detect -> diagnose -> plan -> [human gate] -> remediate -> verify."""
+    detect -> diagnose -> plan -> [human gate] -> remediate -> verify.
+
+    The graph is split at the gate so it can PAUSE for real async approval:
+      run_to_gate()  runs detect/diagnose/plan and stops at AWAITING_APPROVAL
+      resume()       applies a decision, then remediates + verifies
+    run() chains both for the synchronous (test/demo) path."""
 
     def __init__(
         self,
@@ -31,7 +36,13 @@ class Supervisor:
         self.telemetry = telemetry
         self.executor = executor
 
-    def run(self, state: IncidentState, approval_provider: ApprovalProvider) -> IncidentState:
+    def run_to_gate(self, state: IncidentState) -> IncidentState:
+        """Run up to (and stopping at) the human-approval gate.
+
+        Terminal outcomes returned directly: RESOLVED (benign signal).
+        Paused outcome: AWAITING_APPROVAL (caller must later call resume()).
+        Low-risk plans that need no approval are auto-approved and run through
+        to completion here."""
         # 1. Detect
         state.detection = detector.detect(state.signal, self.llm)
         state.log("detector", "detection", state.detection.summary)
@@ -50,25 +61,32 @@ class Supervisor:
         state.status = IncidentStatus.PLANNED
         state.log("planner", "plan", state.plan.summary)
 
-        # 4. Human-in-the-loop gate
+        # 4. Pause at the human-in-the-loop gate.
         if state.plan.requires_approval:
             state.status = IncidentStatus.AWAITING_APPROVAL
             state.log("supervisor", "awaiting_approval", "Remediation needs human approval.")
-            decision = approval_provider(state)
-            state.approval = decision
-            actor = "auto" if decision.approver == "auto" else "human"
-            state.log(
-                actor,
-                "approval" if decision.approved else "rejection",
-                decision.reason,
-            )
-            if not decision.approved:
-                state.status = IncidentStatus.REJECTED
-                return state
-        else:
-            state.approval = ApprovalDecision(
-                approved=True, approver="auto", reason="low-risk auto-approved"
-            )
+            return state
+
+        # Low-risk: no human needed -- auto-approve and run to completion.
+        return self.resume(
+            state,
+            ApprovalDecision(approved=True, approver="auto", reason="low-risk auto-approved"),
+        )
+
+    def resume(self, state: IncidentState, decision: ApprovalDecision) -> IncidentState:
+        """Apply an approval decision and finish the graph: remediate + verify.
+        A rejection stops here. The gated executor independently re-checks the
+        decision -- defense in depth, never weakened."""
+        state.approval = decision
+        actor = "auto" if decision.approver == "auto" else "human"
+        state.log(
+            actor,
+            "approval" if decision.approved else "rejection",
+            decision.reason,
+        )
+        if not decision.approved:
+            state.status = IncidentStatus.REJECTED
+            return state
 
         # 5. Remediate (gated executor double-checks approval)
         state.status = IncidentStatus.REMEDIATING
@@ -93,4 +111,12 @@ class Supervisor:
             if state.verification.resolved
             else IncidentStatus.FAILED
         )
+        return state
+
+    def run(self, state: IncidentState, approval_provider: ApprovalProvider) -> IncidentState:
+        """Synchronous end-to-end run (tests/skeleton). Pauses at the gate, then
+        immediately resolves the decision via the supplied provider."""
+        state = self.run_to_gate(state)
+        if state.status == IncidentStatus.AWAITING_APPROVAL:
+            state = self.resume(state, approval_provider(state))
         return state

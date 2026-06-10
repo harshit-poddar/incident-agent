@@ -22,5 +22,10 @@ class Settings(BaseSettings):
     # Where ReplayLLMClient reads, and capture_fixtures.py writes, fixtures.
     fixtures_dir: str = "fixtures"
 
+    # Incident persistence backend. "memory" (default, no deps) keeps state in a
+    # dict; "postgres" persists it so it survives restarts and the async gate.
+    store_mode: str = "memory"
+    database_url: str = "postgresql://agent:agent@localhost:5432/incidents"
+
 
 settings = Settings()
