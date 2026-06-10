@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AGENTS_026 — Incident Agent</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --txt:#e6e8ee; --mut:#8b93a7; --acc:#6f7bff; --grn:#27c08a; --red:#ef5d6d;
+    --amb:#e7b450; --mono:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px}
+  header{padding:18px 26px;border-bottom:1px solid var(--line);display:flex;
+    align-items:center;justify-content:space-between}
+  header h1{font-size:17px;margin:0;font-weight:600;letter-spacing:.2px}
+  header .sub{color:var(--mut);font-size:12px;margin-top:3px}
+  .wrap{display:grid;grid-template-columns:1fr 340px;gap:18px;padding:18px 26px;max-width:1280px;margin:0 auto}
+  .col{display:flex;flex-direction:column;gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--mut);
+    margin:0 0 12px;font-weight:600}
+  button{font:inherit;cursor:pointer;border:0;border-radius:8px;padding:10px 16px;font-weight:600}
+  .btn-primary{background:var(--acc);color:#fff}
+  .btn-approve{background:var(--grn);color:#04241a}
+  .btn-reject{background:var(--red);color:#2a0508}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  /* pipeline */
+  .pipe{display:flex;gap:6px;flex-wrap:wrap}
+  .stage{flex:1;min-width:78px;text-align:center;padding:9px 4px;border-radius:8px;
+    background:var(--panel2);border:1px solid var(--line);font-size:11px;color:var(--mut);
+    text-transform:uppercase;letter-spacing:.5px;transition:.2s}
+  .stage.done{color:var(--txt);border-color:#34507a;background:#16233a}
+  .stage.active{color:#fff;border-color:var(--acc);background:#27306b;box-shadow:0 0 0 1px var(--acc)}
+  .stage.resolved{border-color:var(--grn);background:#0f2e24;color:#9af0cf}
+  .stage.failed,.stage.rejected{border-color:var(--red);background:#311318;color:#ffb3bd}
+  /* agent cards */
+  .agent{border-left:3px solid var(--line);padding:10px 0 10px 14px;margin-bottom:6px}
+  .agent.filled{border-left-color:var(--acc)}
+  .agent .role{font-weight:600;font-size:12px;color:var(--acc);margin-bottom:4px}
+  .agent .role .conf{color:var(--mut);font-weight:400;float:right}
+  .agent .body{color:var(--txt);line-height:1.5}
+  .agent .muted{color:var(--mut)}
+  ul.evidence{margin:6px 0 0;padding-left:18px;color:var(--mut)}
+  ul.evidence li{margin:2px 0}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+  .pill.high,.pill.critical{background:#3a1620;color:#ff9aa6}
+  .pill.medium{background:#3a2f12;color:var(--amb)}
+  .pill.low{background:#10301f;color:#7fe0b6}
+  /* approval */
+  #gate{display:none}
+  #gate.show{display:block;border-color:var(--amb);box-shadow:0 0 0 1px rgba(231,180,80,.4)}
+  .gate-actions{display:flex;gap:10px;margin-top:12px}
+  .action-row{font-family:var(--mono);font-size:12px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:8px}
+  /* audit */
+  .audit{font-family:var(--mono);font-size:12px;max-height:280px;overflow:auto}
+  .audit .ev{display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--line)}
+  .audit .ac{color:var(--acc);min-width:92px}
+  .audit .de{color:var(--mut)}
+  /* gpu */
+  .bar{height:8px;border-radius:6px;background:var(--panel2);overflow:hidden;margin:5px 0 10px}
+  .bar > i{display:block;height:100%;background:linear-gradient(90deg,#3a7bd5,#6f7bff)}
+  .kv{display:flex;justify-content:space-between;color:var(--mut);font-size:12px}
+  .kv b{color:var(--txt);font-weight:600}
+  .dot{height:8px;width:8px;border-radius:50%;display:inline-block;margin-right:6px;background:var(--mut)}
+  .dot.live{background:var(--grn)}
+  .empty{color:var(--mut);font-style:italic}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>AGENTS_026 · Autonomous Incident Agent</h1>
+    <div class="sub">detect → diagnose → plan → <b>human approval</b> → remediate → verify</div>
+  </div>
+  <button class="btn-primary" id="trigger" onclick="triggerIncident()">⚡ Trigger incident</button>
+</header>
+
+<div class="wrap">
+  <div class="col">
+    <div class="card">
+      <h2>Incident lifecycle <span id="incid" class="muted" style="text-transform:none;color:var(--mut);font-weight:400"></span></h2>
+      <div class="pipe" id="pipe"></div>
+    </div>
+
+    <div class="card" id="gate">
+      <h2>⏸ Human approval gate</h2>
+      <div id="gate-body" class="muted">Remediation requires sign-off.</div>
+      <div class="gate-actions">
+        <button class="btn-approve" onclick="decide(true)">✓ Approve remediation</button>
+        <button class="btn-reject" onclick="decide(false)">✗ Reject</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Agent reasoning</h2>
+      <div id="agents"><div class="empty">No incident yet — click “Trigger incident”.</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Audit trail</h2>
+      <div class="audit" id="audit"><div class="empty">—</div></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card">
+      <h2>Affected service</h2>
+      <div id="svc"><div class="empty">—</div></div>
+    </div>
+    <div class="card">
+      <h2><span class="dot" id="gpudot"></span>MI300X self-monitor</h2>
+      <div id="gpu"><div class="empty">starting…</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SIGNAL = {service:"payments-api",metric:"error_rate",value:0.38,threshold:0.02,
+  message:"5xx error rate breached threshold"};
+const STAGES = ["detected","diagnosing","planned","awaiting_approval","remediating","verifying","resolved"];
+let current = null;  // current incident id
+
+async function api(method, path, body){
+  const opt = {method, headers:{"Content-Type":"application/json"}};
+  if(body) opt.body = JSON.stringify(body);
+  const r = await fetch(path, opt);
+  if(!r.ok) throw new Error(method+" "+path+" -> "+r.status);
+  return r.json();
+}
+
+function rank(status){
+  const i = STAGES.indexOf(status);
+  return i === -1 ? STAGES.length : i;  // rejected/failed -> past the line
+}
+
+function renderPipe(status){
+  const cur = rank(status);
+  document.getElementById("pipe").innerHTML = STAGES.map((s,i)=>{
+    let cls = "stage";
+    if(status===s) cls += s==="resolved" ? " resolved active" : " active";
+    else if(i < cur) cls += " done";
+    if(status==="resolved" && s==="resolved") cls = "stage resolved active";
+    return `<div class="${cls}">${s.replace("_"," ")}</div>`;
+  }).join("");
+  if(status==="rejected"||status==="failed"){
+    document.getElementById("pipe").innerHTML +=
+      `<div class="stage ${status}">${status}</div>`;
+  }
+}
+
+function agentCard(role, filled, inner){
+  return `<div class="agent ${filled?'filled':''}">
+    <div class="role">${role}</div>
+    <div class="body">${filled?inner:'<span class="muted">pending…</span>'}</div></div>`;
+}
+
+function renderAgents(s){
+  const d=s.detection, dg=s.diagnosis, p=s.plan, v=s.verification;
+  let html = "";
+  html += agentCard("Detector", !!d, d ? `${d.summary}
+    <span class="pill ${d.severity}">${d.severity}</span>
+    <span class="muted"> · conf ${(d.confidence*100|0)}%</span>` : "");
+  html += agentCard("Diagnoser", !!dg, dg ? `${dg.root_cause}
+    <ul class="evidence">${(dg.evidence||[]).map(e=>`<li>${e}</li>`).join("")}</ul>
+    <span class="muted">confidence ${(dg.confidence*100|0)}%</span>` : "");
+  html += agentCard("Planner", !!p, p ? `${p.summary}
+    ${(p.actions||[]).map(a=>`<div class="action-row">${a.action} → <b>${a.target}</b>
+      <span class="pill ${a.risk}">${a.risk}</span><br><span class="de">${a.rationale}</span></div>`).join("")}` : "");
+  html += agentCard("Verifier", !!v, v ? `${v.summary}
+    <br><span class="pill ${v.resolved?'low':'high'}">${v.resolved?'resolved':'not resolved'}</span>
+    ${v.notes?`<br><span class="muted">${v.notes}</span>`:""}` : "");
+  document.getElementById("agents").innerHTML = html;
+}
+
+function renderAudit(s){
+  const a = s.audit||[];
+  document.getElementById("audit").innerHTML = a.length ? a.map(e=>
+    `<div class="ev"><span class="ac">[${e.actor}]</span>
+     <span>${e.event}</span><span class="de">${e.detail||""}</span></div>`).join("")
+    : '<div class="empty">—</div>';
+}
+
+function renderGate(s){
+  const gate = document.getElementById("gate");
+  if(s.status === "awaiting_approval"){
+    gate.classList.add("show");
+    document.getElementById("gate-body").innerHTML =
+      `<b>${s.plan.summary}</b><br><span class="muted">Approving will let the agent execute the remediation in the sandbox cluster.</span>`;
+  } else {
+    gate.classList.remove("show");
+  }
+}
+
+async function renderSvc(service){
+  try{
+    const m = await api("GET", `/telemetry/service/${service}`);
+    document.getElementById("svc").innerHTML = `
+      <div class="kv"><span>service</span><b>${m.service}</b></div>
+      <div class="kv"><span>health</span><b style="color:${m.healthy?'var(--grn)':'var(--red)'}">${m.healthy?'healthy':'degraded'}</b></div>
+      <div class="kv"><span>error rate</span><b>${(m.error_rate*100).toFixed(1)}%</b></div>
+      <div class="kv"><span>mem usage</span><b>${(m.mem_usage*100).toFixed(0)}%</b></div>
+      <div class="kv"><span>p95 latency</span><b>${m.p95_latency_ms|0} ms</b></div>`;
+  }catch(e){ /* service unknown until triggered */ }
+}
+
+function render(s){
+  current = s.id;
+  document.getElementById("incid").textContent = " · " + s.id + " · " + s.status;
+  renderPipe(s.status); renderAgents(s); renderAudit(s); renderGate(s);
+  renderSvc(s.signal.service);
+}
+
+async function triggerIncident(){
+  const btn = document.getElementById("trigger");
+  btn.disabled = true; btn.textContent = "running…";
+  try{
+    const s = await api("POST", "/incidents", SIGNAL);
+    render(s);
+  }catch(e){ alert(e.message); }
+  finally{ btn.disabled = false; btn.textContent = "⚡ Trigger incident"; }
+}
+
+async function decide(approved){
+  if(!current) return;
+  const s = await api("POST", `/incidents/${current}/approve`,
+    {approved, approver:"manager", reason: approved?"approved in demo":"rejected in demo"});
+  render(s);
+}
+
+async function pollGpu(){
+  try{
+    const gpus = await api("GET", "/telemetry/gpu");
+    document.getElementById("gpudot").classList.add("live");
+    document.getElementById("gpu").innerHTML = gpus.map(g=>{
+      const pct = (g.vram_used_gb/g.vram_total_gb*100);
+      return `<div style="font-weight:600;margin-bottom:6px">${g.device}</div>
+      <div class="kv"><span>GPU util</span><b>${g.gpu_util_pct.toFixed(0)}%</b></div>
+      <div class="bar"><i style="width:${g.gpu_util_pct}%"></i></div>
+      <div class="kv"><span>VRAM</span><b>${g.vram_used_gb.toFixed(0)} / ${g.vram_total_gb.toFixed(0)} GB</b></div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <div class="kv"><span>temp</span><b>${g.temp_c.toFixed(0)} °C</b></div>
+      <div class="kv"><span>power</span><b>${g.power_w.toFixed(0)} W</b></div>`;
+    }).join("");
+  }catch(e){
+    document.getElementById("gpudot").classList.remove("live");
+  }
+}
+
+renderPipe("");           // empty pipeline on load
+pollGpu(); setInterval(pollGpu, 3000);
+</script>
+</body>
+</html>

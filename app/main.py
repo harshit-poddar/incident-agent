@@ -13,7 +13,10 @@ State lives in an IncidentStore (in-memory by default, Postgres via
 STORE_MODE=postgres) so it survives between the pause and the resume."""
 from __future__ import annotations
 
+import pathlib
+
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from app.llm.factory import get_llm_client
@@ -35,6 +38,13 @@ app = FastAPI(title="Autonomous incident agent (AGENTS_026)")
 # paused incident alive across those two requests.
 _STORE = get_incident_store()
 _CLUSTER = MockCluster()
+_WEB_DIR = pathlib.Path(__file__).parent / "web"
+
+
+@app.get("/", response_class=HTMLResponse)
+def dashboard() -> str:
+    """The ops dashboard -- a self-contained page that drives the API below."""
+    return (_WEB_DIR / "index.html").read_text(encoding="utf-8")
 
 
 class ApproveRequest(BaseModel):
