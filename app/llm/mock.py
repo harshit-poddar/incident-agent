@@ -29,8 +29,11 @@ class MockLLMClient:
 
 
 def default_mock_client() -> MockLLMClient:
-    """Golden-path scenario: payments-api OOM -> restart -> resolved."""
-    from app.schemas.incident import Detection, Diagnosis, Verification
+    """Golden-path scenario: payments-api OOM -> restart -> resolved.
+
+    Also scripts ProposedFix for the GitHub CI-failure path (the Fixer agent),
+    so the same offline client drives both the runtime and code-fix demos."""
+    from app.schemas.incident import Detection, Diagnosis, ProposedFix, Verification
     from app.tools.schemas import (
         RemediationAction,
         RemediationActionType,
@@ -82,6 +85,28 @@ def default_mock_client() -> MockLLMClient:
             resolved=True,
             summary="error_rate back to 0.4%, memory nominal across pods",
             notes="Follow-up: investigate memory leak introduced in build #482",
+        ),
+    )
+    c.register(
+        "ProposedFix",
+        lambda: ProposedFix(
+            file_path="payments/handler.py",
+            new_content=(
+                "# payments/handler.py  (excerpt)\n"
+                "from functools import lru_cache\n\n"
+                "@lru_cache(maxsize=10_000)\n"
+                "def handle_payment(req):\n"
+                "    # FIX: bound the cache so it can no longer grow unboundedly\n"
+                "    return build_receipt(req)\n"
+            ),
+            pr_title="fix(payments): bound receipt cache to stop OOM",
+            pr_body=(
+                "Root cause: `CACHE` in `handle_payment` grew without bound, "
+                "exhausting heap and OOM-killing the pod (see runbook RB-114).\n\n"
+                "Fix: replace the unbounded dict with an LRU cache capped at 10k "
+                "entries. Steady-state memory now flat under sustained load."
+            ),
+            rationale="Unbounded cache was the leak; an LRU cap fixes it with a minimal diff.",
         ),
     )
     return c

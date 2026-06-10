@@ -45,5 +45,26 @@ class Settings(BaseSettings):
     gpu_monitor_mode: str = "mock"
     redis_url: str = "redis://localhost:6379/0"
 
+    # GitHub integration. github_mode picks the client (mock = offline canned
+    # data, no network; live = real REST API behind a PAT). The webhook receiver
+    # verifies payloads against github_webhook_secret; the agent opens PRs
+    # against github_base_branch in github_repo (owner/name). The offending file
+    # the Fixer reads/patches in the demo scenario is github_target_file.
+    github_mode: str = "mock"
+    github_token: str = ""
+    github_repo: str = "harshit-poddar/incident-agent"
+    github_base_branch: str = "main"
+    github_webhook_secret: str = ""
+    github_target_file: str = "payments/handler.py"
+
+    # Observability (Slice 6). trace_mode picks the span sink: "memory" (default,
+    # no deps -- powers the dashboard waterfall) or "otel" (memory + an
+    # OpenTelemetry exporter). With otel, an empty otel_endpoint uses the console
+    # exporter; set it to an OTLP gRPC endpoint (e.g. localhost:4317) to ship
+    # spans to Jaeger/Tempo/Logfire.
+    trace_mode: str = "memory"
+    otel_endpoint: str = ""
+    otel_service_name: str = "agents-026-incident-agent"
+
 
 settings = Settings()

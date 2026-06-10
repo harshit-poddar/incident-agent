@@ -68,6 +68,30 @@
   .dot{height:8px;width:8px;border-radius:50%;display:inline-block;margin-right:6px;background:var(--mut)}
   .dot.live{background:var(--grn)}
   .empty{color:var(--mut);font-style:italic}
+  /* pipeline log console */
+  .pipelog{font-family:var(--mono);font-size:12px;max-height:220px;overflow:auto;
+    background:#0b0d12;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+  .logln{display:flex;gap:10px;padding:2px 0;align-items:baseline}
+  .logln .lts{color:#5b6478;min-width:58px;flex:none}
+  .logln .lstage{color:var(--acc);min-width:58px;flex:none;text-transform:uppercase;font-size:10px;letter-spacing:.5px}
+  .logln .lsvc{color:#7fa7ff;flex:none}
+  .logln .lmsg{color:var(--mut)}
+  .lvl-OK .lmsg{color:#7fe0b6}
+  .lvl-INFO .lmsg{color:var(--mut)}
+  .lvl-WARN .lmsg{color:var(--amb)}
+  .lvl-ERROR .lmsg{color:#ff8a96}
+  .lvl-ERROR .lstage{color:var(--red)}
+  .btn-pipe{background:#16402e;color:#9af0cf;border:1px solid #1f6f4d}
+  .btn-gh{background:#21262d;color:#d6e2ff;border:1px solid #3a4252}
+  /* proposed code fix */
+  #fixcard{display:none}
+  #fixcard.show{display:block;border-color:#34507a}
+  .fixmeta{color:var(--mut);margin-bottom:8px}
+  .fixmeta b{color:var(--txt)}
+  .code{font-family:var(--mono);font-size:12px;background:#0b0d12;border:1px solid var(--line);
+    border-radius:8px;padding:10px 12px;overflow:auto;white-space:pre;color:#cdd6e4;max-height:220px}
+  .prlink{display:inline-block;margin-top:10px;padding:8px 12px;border-radius:8px;
+    background:#16402e;color:#9af0cf;border:1px solid #1f6f4d;text-decoration:none;font-weight:600}
 </style>
 </head>
 <body>
@@ -77,6 +101,8 @@
     <div class="sub">detect → diagnose → plan → <b>human approval</b> → remediate → verify</div>
   </div>
   <div style="display:flex;gap:10px">
+    <button class="btn-pipe" id="runpipe" onclick="runPipeline()">▶ Run pipeline</button>
+    <button class="btn-gh" id="simci" onclick="simulateCI()">🐙 Simulate CI failure</button>
     <button class="btn-primary" id="trigger" onclick="triggerIncident()">⚡ Trigger incident</button>
     <button id="reset" onclick="resetDemo()" style="background:var(--panel2);color:var(--mut);border:1px solid var(--line)">↺ Reset</button>
   </div>
@@ -84,6 +110,12 @@
 
 <div class="wrap">
   <div class="col">
+    <div class="card">
+      <h2><span class="dot" id="pipedot"></span>CI / runtime log monitor
+        <span class="muted" style="text-transform:none;font-weight:400">— watches the stream, auto-opens incidents</span></h2>
+      <div class="pipelog" id="pipelog"><div class="empty">Click “Run pipeline” to stream live logs.</div></div>
+    </div>
+
     <div class="card">
       <h2>Incident lifecycle <span id="incid" class="muted" style="text-transform:none;color:var(--mut);font-weight:400"></span></h2>
       <div class="pipe" id="pipe"></div>
@@ -96,6 +128,11 @@
         <button class="btn-approve" onclick="decide(true)">✓ Approve remediation</button>
         <button class="btn-reject" onclick="decide(false)">✗ Reject</button>
       </div>
+    </div>
+
+    <div class="card" id="fixcard">
+      <h2>🔧 Proposed code fix <span class="muted" style="text-transform:none;font-weight:400">— LLM-generated, gated behind approval</span></h2>
+      <div id="fixbody"></div>
     </div>
 
     <div class="card">
@@ -187,12 +224,45 @@ function renderAudit(s){
     : '<div class="empty">—</div>';
 }
 
+function esc(t){
+  return (t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function openPrAction(s){
+  return (s.plan && s.plan.actions || []).find(a=>a.action==="open_pr") || null;
+}
+
+function prUrlFromResults(s){
+  const r = (s.remediation_results||[]).map(x=>x.output||"").join(" ");
+  const m = r.match(/https:\/\/github\.com\/\S+/);
+  return m ? m[0] : null;
+}
+
+function renderFix(s){
+  const card = document.getElementById("fixcard");
+  const a = openPrAction(s);
+  if(!a || !a.fix){ card.classList.remove("show"); return; }
+  card.classList.add("show");
+  const f = a.fix;
+  const pr = prUrlFromResults(s);
+  document.getElementById("fixbody").innerHTML =
+    `<div class="fixmeta"><b>${esc(f.pr_title)}</b><br>${esc(f.rationale)}</div>`+
+    `<div class="fixmeta">file <b>${esc(f.file_path)}</b></div>`+
+    `<div class="code">${esc(f.new_content)}</div>`+
+    (pr ? `<a class="prlink" href="${pr}" target="_blank">✓ Pull request opened → ${esc(pr)}</a>`
+        : `<div class="fixmeta" style="margin-top:8px">PR opens only after you approve.</div>`);
+}
+
 function renderGate(s){
   const gate = document.getElementById("gate");
   if(s.status === "awaiting_approval"){
     gate.classList.add("show");
+    const isPr = !!openPrAction(s);
+    const note = isPr
+      ? "Approving will let the agent open a pull request with the fix above."
+      : "Approving will let the agent execute the remediation in the sandbox cluster.";
     document.getElementById("gate-body").innerHTML =
-      `<b>${s.plan.summary}</b><br><span class="muted">Approving will let the agent execute the remediation in the sandbox cluster.</span>`;
+      `<b>${s.plan.summary}</b><br><span class="muted">${note}</span>`;
   } else {
     gate.classList.remove("show");
   }
@@ -213,7 +283,7 @@ async function renderSvc(service){
 function render(s){
   current = s.id;
   document.getElementById("incid").textContent = " · " + s.id + " · " + s.status;
-  renderPipe(s.status); renderAgents(s); renderAudit(s); renderGate(s);
+  renderPipe(s.status); renderAgents(s); renderFix(s); renderAudit(s); renderGate(s);
   renderSvc(s.signal.service);
 }
 
@@ -227,6 +297,62 @@ async function triggerIncident(){
   finally{ btn.disabled = false; btn.textContent = "⚡ Trigger incident"; }
 }
 
+async function simulateCI(){
+  // Offline stand-in for a real GitHub webhook: a CI run "fails", the agent
+  // diagnoses it and proposes a PR -- paused at the gate. (A real webhook hits
+  // the same path; the live-watch poll below picks those up automatically.)
+  const btn = document.getElementById("simci");
+  btn.disabled = true; btn.textContent = "CI failing…";
+  try{
+    const s = await api("POST", "/github/simulate");
+    render(s);
+  }catch(e){ alert(e.message); }
+  finally{ btn.disabled = false; btn.textContent = "🐙 Simulate CI failure"; }
+}
+
+// ---- live CI / runtime log monitor (SSE) ----
+let pipeES = null;
+
+function logLine(o){
+  const box = document.getElementById("pipelog");
+  const first = box.querySelector(".empty");
+  if(first) box.innerHTML = "";
+  const div = document.createElement("div");
+  div.className = "logln lvl-" + (o.level || "INFO");
+  const svc = o.service ? `<span class="lsvc">${o.service}</span>` : "";
+  div.innerHTML =
+    `<span class="lts">${o.ts || ""}</span>` +
+    `<span class="lstage">${o.stage || ""}</span>` + svc +
+    `<span class="lmsg">${o.msg || ""}</span>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function finishPipeline(){
+  if(pipeES){ pipeES.close(); pipeES = null; }
+  document.getElementById("pipedot").classList.remove("live");
+  const r = document.getElementById("runpipe");
+  r.disabled = false; r.textContent = "▶ Run pipeline";
+  document.getElementById("trigger").disabled = false;
+}
+
+function runPipeline(){
+  const r = document.getElementById("runpipe");
+  r.disabled = true; r.textContent = "streaming…";
+  document.getElementById("trigger").disabled = true;
+  document.getElementById("pipelog").innerHTML = "";
+  document.getElementById("pipedot").classList.add("live");
+  if(pipeES) pipeES.close();
+  pipeES = new EventSource("/pipeline/stream");
+  pipeES.onmessage = (e)=>{
+    const o = JSON.parse(e.data);
+    if(o.type === "log") logLine(o);
+    else if(o.type === "incident") render(o.incident);   // hand off to the lifecycle UI
+    else if(o.type === "done") finishPipeline();
+  };
+  pipeES.onerror = ()=>{ finishPipeline(); };  // also closes after the stream ends
+}
+
 async function decide(approved){
   if(!current) return;
   const s = await api("POST", `/incidents/${current}/approve`,
@@ -235,6 +361,7 @@ async function decide(approved){
 }
 
 async function resetDemo(){
+  if(pipeES){ pipeES.close(); pipeES = null; }
   await api("DELETE", "/incidents");
   current = null;
   document.getElementById("incid").textContent = "";
@@ -243,6 +370,19 @@ async function resetDemo(){
   document.getElementById("agents").innerHTML = '<div class="empty">No incident yet — click “Trigger incident”.</div>';
   document.getElementById("audit").innerHTML = '<div class="empty">—</div>';
   document.getElementById("svc").innerHTML = '<div class="empty">—</div>';
+  document.getElementById("pipelog").innerHTML = '<div class="empty">Click “Run pipeline” to stream live logs.</div>';
+  document.getElementById("fixcard").classList.remove("show");
+}
+
+// Live watch: pick up incidents opened out-of-band by the GitHub webhook. Only
+// adopts the latest one when nothing is on screen, so it never hijacks a demo
+// you're driving by hand.
+async function watchLatest(){
+  if(current) return;
+  try{
+    const s = await api("GET", "/incidents/latest");
+    if(s && s.id) render(s);
+  }catch(e){ /* none yet */ }
 }
 
 async function pollGpu(){
@@ -266,6 +406,7 @@ async function pollGpu(){
 
 renderPipe("");           // empty pipeline on load
 pollGpu(); setInterval(pollGpu, 3000);
+setInterval(watchLatest, 3000);   // adopt webhook-opened incidents when idle
 </script>
 </body>
 </html>

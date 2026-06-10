@@ -43,3 +43,15 @@ class Verification(BaseModel):
     resolved: bool
     summary: str
     notes: str | None = None
+
+
+class ProposedFix(BaseModel):
+    """A code change the agent proposes to fix a CI failure. The LLM fills this
+    in; opening it as a PR is a gated side effect (see RemediationActionType.
+    OPEN_PR), so the human reviews this before it ever touches the repo."""
+
+    file_path: str
+    new_content: str
+    pr_title: str
+    pr_body: str
+    rationale: str

@@ -9,3 +9,8 @@ venv/
 fixtures/*.json
 .claude/
 CLAUDE.md
+file.txt
+secrets.txt
+*.secret
+frontend/node_modules/
+frontend/.vite/

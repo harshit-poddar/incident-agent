@@ -23,8 +23,12 @@ class KnowledgeTool:
         seed_runbooks(self._store, self._embedder)
 
     def search_runbooks(self, query: str) -> list[str]:
-        if self._store.count() == 0:
-            return ["No matching runbook; proceed with standard triage."]
-        query_vec = self._embedder.embed([query])[0]
-        hits = self._store.search(query_vec, self._top_k)
-        return [f"{h['id']}: {h['text']}" for h in hits]
+        from app.obs.tracer import span
+
+        with span("rag.search_runbooks", kind="tool", top_k=self._top_k) as sp:
+            if self._store.count() == 0:
+                return ["No matching runbook; proceed with standard triage."]
+            query_vec = self._embedder.embed([query])[0]
+            hits = self._store.search(query_vec, self._top_k)
+            sp.attributes["hits"] = len(hits)
+            return [f"{h['id']}: {h['text']}" for h in hits]

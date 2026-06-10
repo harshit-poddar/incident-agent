@@ -19,3 +19,5 @@ curl http://localhost:8000/v1/models -H "Authorization: Bearer $MODEL_API_KEY"
 curl http://localhost:8000/v1/chat/completions \
   -H "Authorization: Bearer $MODEL_API_KEY" -H "Content-Type: application/json" \
   -d '{"model":"incident-llm","messages":[{"role":"user","content":"ping"}],"max_tokens":10}'
+
+ $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")

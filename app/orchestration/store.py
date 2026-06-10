@@ -38,6 +38,9 @@ class InMemoryIncidentStore:
     def save(self, state: IncidentState) -> None:
         # Store a copy so external mutation of the returned object can't corrupt
         # what we hold -- mirrors how a real DB row is decoupled from memory.
+        # Re-insert so dict order tracks most-recently-updated last, matching
+        # Postgres's `ORDER BY updated_at` so list_ids() agrees across backends.
+        self._by_id.pop(state.id, None)
         self._by_id[state.id] = state.model_copy(deep=True)
 
     def get(self, incident_id: str) -> IncidentState | None:
@@ -45,7 +48,8 @@ class InMemoryIncidentStore:
         return found.model_copy(deep=True) if found is not None else None
 
     def list_ids(self) -> list[str]:
-        return list(self._by_id.keys())
+        # Newest-updated first, matching PostgresIncidentStore.
+        return list(reversed(self._by_id.keys()))
 
     def clear(self) -> int:
         n = len(self._by_id)

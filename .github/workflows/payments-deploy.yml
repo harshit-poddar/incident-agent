@@ -1,0 +1,24 @@
+# Demo CI workflow for the incident agent.
+#
+# Triggered MANUALLY (workflow_dispatch) so it never breaks normal pushes. Run
+# it from the GitHub Actions tab to simulate a failed payments-api deploy: it
+# emits OOM logs and exits non-zero. GitHub then fires a `workflow_run`
+# (completed/failure) webhook at the agent, which diagnoses the failure and
+# proposes a fix PR -- gated behind human approval in the dashboard.
+name: deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Roll out payments-api
+        run: |
+          echo "rolling out payments-api to sandbox cluster"
+          echo "payments-api ERROR java.lang.OutOfMemoryError: Java heap space"
+          echo "payments-api ERROR pod payments-api-7c9 OOMKilled -- restarting"
+          echo "::error::health check failed (3/3) err_rate 0.38 > 0.02"
+          exit 1

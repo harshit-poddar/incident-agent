@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config import settings
+from app.github.client import GitHubClient
 from app.tools.schemas import (
     ApprovalDecision,
     RemediationAction,
@@ -32,10 +34,12 @@ class GateError(PermissionError):
 class RemediationExecutor:
     """Side-effectful tool. Refuses to act without an approved decision -- the
     human-in-the-loop gate is enforced HERE as defense in depth, not only in
-    the orchestration layer."""
+    the orchestration layer. Opening a PR is just another gated action, so the
+    same single check protects code changes and infra changes alike."""
 
-    def __init__(self, cluster: MockCluster) -> None:
+    def __init__(self, cluster: MockCluster, github: GitHubClient | None = None) -> None:
         self._cluster = cluster
+        self._github = github
 
     def execute(
         self, action: RemediationAction, approval: ApprovalDecision
@@ -45,6 +49,19 @@ class RemediationExecutor:
         if action.action == RemediationActionType.RESTART_SERVICE:
             out = self._cluster.restart(action.target)
             return RemediationResult(action=action, success=True, output=out)
+        if action.action == RemediationActionType.OPEN_PR:
+            if self._github is None or action.fix is None:
+                return RemediationResult(
+                    action=action,
+                    success=False,
+                    output="OPEN_PR requires a GitHub client and a proposed fix.",
+                )
+            pr = self._github.open_pr(action.target, settings.github_base_branch, action.fix)
+            return RemediationResult(
+                action=action,
+                success=True,
+                output=f"opened PR #{pr.number} ({pr.branch}): {pr.url}",
+            )
         return RemediationResult(
             action=action,
             success=False,

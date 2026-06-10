@@ -11,10 +11,10 @@ def test_dashboard_served_at_root():
     r = client.get("/")
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
-    # Key bits of the dashboard are present.
+    # Branding is present whether we serve the React build or the legacy page.
     assert "AGENTS_026" in r.text
-    assert "Trigger incident" in r.text
-    assert "MI300X" in r.text
+    # It is a real HTML document mounting an app (React #root) or the legacy UI.
+    assert "<div id=\"root\">" in r.text or "Trigger incident" in r.text
 
 
 def test_dashboard_drives_real_api():
