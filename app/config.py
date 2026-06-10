@@ -27,5 +27,16 @@ class Settings(BaseSettings):
     store_mode: str = "memory"
     database_url: str = "postgresql://agent:agent@localhost:5432/incidents"
 
+    # RAG over runbooks. rag_mode picks the vector store (memory | qdrant);
+    # embed_mode picks the embedder (mock = HashEmbedder, no GPU; live = served
+    # embedding model). embed_dim must match the qdrant collection AND, in live
+    # mode, the embedding model's output dimension.
+    rag_mode: str = "memory"
+    embed_mode: str = "mock"
+    embed_dim: int = 256
+    embed_model_name: str = "bge-small-en"
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_collection: str = "runbooks"
+
 
 settings = Settings()
