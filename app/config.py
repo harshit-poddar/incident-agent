@@ -38,5 +38,12 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "runbooks"
 
+    # Telemetry. telemetry_mode picks the service-metrics source (mock = in-proc,
+    # redis = ingest from a Redis Stream event queue). gpu_monitor_mode picks the
+    # MI300X self-monitor (mock = fake readings, rocm = shell out to rocm-smi).
+    telemetry_mode: str = "mock"
+    gpu_monitor_mode: str = "mock"
+    redis_url: str = "redis://localhost:6379/0"
+
 
 settings = Settings()

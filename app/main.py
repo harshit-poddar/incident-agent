@@ -21,6 +21,8 @@ from app.orchestration.state import IncidentState, IncidentStatus
 from app.orchestration.store import get_incident_store
 from app.orchestration.supervisor import Supervisor
 from app.schemas.incident import Signal
+from app.telemetry.gpu import get_gpu_monitor
+from app.telemetry.metrics import GpuMetrics, ServiceMetrics
 from app.tools.knowledge import KnowledgeTool
 from app.tools.remediation import MockCluster, RemediationExecutor
 from app.tools.schemas import ApprovalDecision
@@ -95,3 +97,14 @@ def get_incident(incident_id: str) -> IncidentState:
 @app.get("/incidents")
 def list_incidents() -> list[str]:
     return _STORE.list_ids()
+
+
+@app.get("/telemetry/gpu")
+def gpu_telemetry() -> list[GpuMetrics]:
+    """The MI300X self-monitor: the agent reporting on the hardware it runs on."""
+    return get_gpu_monitor().sample()
+
+
+@app.get("/telemetry/service/{service}")
+def service_telemetry(service: str) -> ServiceMetrics:
+    return TelemetryTool().query_metrics(service)

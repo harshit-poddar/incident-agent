@@ -1,16 +1,19 @@
 from __future__ import annotations
 
-# Stubbed telemetry source. Swap for a Prometheus / event-queue query in prod.
-_DEGRADED = {"error_rate": 0.38, "mem_usage": 0.98, "p95_latency_ms": 2400}
-_HEALTHY = {"error_rate": 0.004, "mem_usage": 0.41, "p95_latency_ms": 180}
+from app.telemetry.metrics import ServiceMetrics
+from app.telemetry.source import TelemetrySource, get_telemetry_source
 
 
 class TelemetryTool:
-    def __init__(self) -> None:
-        self._recovered: set[str] = set()
+    """Agent-facing telemetry tool. Thin wrapper over a TelemetrySource (mock or
+    redis, chosen by TELEMETRY_MODE) so agents are unaware of the backend -- the
+    same seam pattern as LLMClient and the vector store."""
+
+    def __init__(self, source: TelemetrySource | None = None) -> None:
+        self._source = source or get_telemetry_source()
+
+    def query_metrics(self, service: str) -> ServiceMetrics:
+        return self._source.query_metrics(service)
 
     def mark_recovered(self, service: str) -> None:
-        self._recovered.add(service)
-
-    def query_metrics(self, service: str) -> dict:
-        return dict(_HEALTHY if service in self._recovered else _DEGRADED)
+        self._source.mark_recovered(service)
