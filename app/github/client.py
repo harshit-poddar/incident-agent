@@ -39,6 +39,32 @@ def handle_payment(req):
     return CACHE[req.id]
 """
 
+# A vulnerable Java file the mock 'serves' for the security-scan demo: a textbook
+# CWE-89 (the user_id is concatenated straight into the SQL string). The
+# fine-tuned vuln-fixer model rewrites it to a parameterised PreparedStatement.
+_MOCK_JAVA_FILE = """\
+package com.acme.payments;
+
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.Statement;
+
+public class PaymentRepository {
+    private final Connection connection;
+
+    public PaymentRepository(Connection connection) {
+        this.connection = connection;
+    }
+
+    public ResultSet findByUser(String userId) throws Exception {
+        Statement stmt = connection.createStatement();
+        // VULN (CWE-89): untrusted userId concatenated straight into the query.
+        String query = "SELECT * FROM payments WHERE user_id = '" + userId + "'";
+        return stmt.executeQuery(query);
+    }
+}
+"""
+
 _MOCK_LOGS = """\
 2025-06-10T12:34:16Z payments-api ERROR java.lang.OutOfMemoryError: Java heap space
 2025-06-10T12:34:16Z payments-api ERROR pod payments-api-7c9 OOMKilled -- restarting
@@ -59,7 +85,7 @@ class MockGitHubClient:
         return _MOCK_LOGS
 
     def get_file(self, repo: str, path: str, ref: str) -> str:
-        return _MOCK_FILE
+        return _MOCK_JAVA_FILE if path.endswith(".java") else _MOCK_FILE
 
     def open_pr(self, repo: str, base: str, fix: ProposedFix) -> PullRequestRef:
         number = self._next_number

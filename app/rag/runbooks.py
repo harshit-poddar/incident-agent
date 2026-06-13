@@ -22,6 +22,17 @@ RUNBOOKS: list[dict] = [
         "tags": ["oom", "memory", "payments-api", "5xx", "restart"],
     },
     {
+        "id": "RB-203",
+        "title": "SQL injection flagged by SAST (CWE-89)",
+        "text": (
+            "A security scan flags CWE-89 SQL injection when untrusted input is "
+            "concatenated into a SQL query string. Remediate by parameterising "
+            "the query: use a PreparedStatement with bind parameters instead of "
+            "string concatenation. Open a fix PR and have it reviewed before merge."
+        ),
+        "tags": ["security", "cwe-89", "sql", "injection", "open_pr", "sast"],
+    },
+    {
         "id": "RB-201",
         "title": "high latency from CPU saturation",
         "text": (

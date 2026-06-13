@@ -2,8 +2,37 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 
 from app.github.schemas import WorkflowRun
+
+# Workflow names whose FAILURE means "a security scan tripped", so the incident
+# should be routed to the fine-tuned Java vuln-fixer rather than the generic CI
+# fixer. Matched case-insensitively as substrings of the workflow name.
+_SECURITY_WORKFLOW_HINTS = ("security", "sast", "codeql", "vuln", "scan")
+
+_CWE_RE = re.compile(r"\bCWE-\d+\b", re.IGNORECASE)
+_JAVA_FILE_RE = re.compile(r"[\w./\-]+\.java\b")
+
+
+def is_security_failure(run: WorkflowRun, logs: str = "") -> bool:
+    """True if a failed run looks like a SAST/security-scan finding -- by the
+    workflow name (security-scan, codeql, ...) or by a CWE id appearing in its
+    logs. This is the routing switch: security -> JavaVulnFixer, else -> Fixer."""
+    name = (run.name or "").lower()
+    if any(hint in name for hint in _SECURITY_WORKFLOW_HINTS):
+        return True
+    return bool(_CWE_RE.search(logs))
+
+
+def parse_sast_finding(logs: str) -> tuple[str | None, str | None]:
+    """Pull the (CWE id, Java file path) out of scan logs, if present. This is
+    the auto-detection the JavaVulnFixer's TODO asked for: a real scanner names
+    both in its output. Returns (None, None) for whichever it cannot find, so the
+    caller can fall back to configured defaults."""
+    cwe = _CWE_RE.search(logs)
+    java = _JAVA_FILE_RE.search(logs)
+    return (cwe.group(0).upper() if cwe else None, java.group(0) if java else None)
 
 
 def verify_signature(body: bytes, header: str | None, secret: str) -> bool:

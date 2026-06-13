@@ -9,7 +9,6 @@ import AgentReasoning from './components/AgentReasoning'
 import TraceWaterfall from './components/TraceWaterfall'
 import AuditTrail from './components/AuditTrail'
 import ServicePanel from './components/ServicePanel'
-import GpuPanel from './components/GpuPanel'
 
 export default function App() {
   const [incident, setIncident] = useState(null)
@@ -84,6 +83,13 @@ export default function App() {
     finally { setBusy(false) }
   }, [])
 
+  const simulateVuln = useCallback(async () => {
+    setBusy(true)
+    try { setIncident(await postJSON('/github/simulate-vuln')) }
+    catch (e) { alert(e.message) }
+    finally { setBusy(false) }
+  }, [])
+
   const decide = useCallback(async (approved) => {
     const cur = incidentRef.current
     if (!cur) return
@@ -129,6 +135,7 @@ export default function App() {
       <Header
         onPipeline={runPipeline}
         onSimulate={simulateCI}
+        onSimulateVuln={simulateVuln}
         onTrigger={triggerIncident}
         onReset={reset}
         streaming={streaming}
@@ -138,16 +145,13 @@ export default function App() {
         <div className="grid">
           <div className="col">
             <LifecyclePipeline incident={incident} />
+            <ServicePanel metrics={serviceMetrics} />
             <LogConsole lines={logs} streaming={streaming} />
             <ApprovalGate incident={incident} onDecide={decide} busy={busy} />
             <ProposedFix incident={incident} />
             <AgentReasoning incident={incident} />
             <TraceWaterfall spans={spans} />
             <AuditTrail incident={incident} />
-          </div>
-          <div className="col">
-            <ServicePanel metrics={serviceMetrics} />
-            <GpuPanel gpus={gpus} live={gpuLive} />
           </div>
         </div>
       </div>

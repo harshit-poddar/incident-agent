@@ -7,10 +7,16 @@ venv/
 .ruff_cache/
 *.egg-info/
 fixtures/*.json
-.claude/
-CLAUDE.md
 file.txt
 secrets.txt
 *.secret
 frontend/node_modules/
 frontend/.vite/
+DEMO.md
+out.txt
+.incident_id.txt
+.env.pod.example
+
+# Maven build output
+target/
+*.class

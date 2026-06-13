@@ -57,6 +57,22 @@ class Settings(BaseSettings):
     github_webhook_secret: str = ""
     github_target_file: str = "payments/handler.py"
 
+    # Java vulnerability fixer. A SEPARATE fine-tuned model -- a LoRA adapter
+    # ("vuln-fixer") on Qwen2.5-Coder-7B served via vLLM --enable-lora behind its
+    # own OpenAI-compatible endpoint. It is NOT the general LLMClient: it takes
+    # verbatim fine-tuned prompts and returns raw Java inside a ```java fence, so
+    # it lives behind its own seam (app/tools/vuln_fixer.py). vuln_fixer_mode:
+    # mock (offline canned secure rewrite, no GPU) | live (hit the endpoint). The
+    # security-scan demo fetches/patches vuln_demo_file for the CWE the scanner
+    # flagged (vuln_demo_cwe); the orchestrator passes the CWE explicitly until a
+    # real SAST scanner auto-detects it.
+    vuln_fixer_mode: str = "mock"
+    vuln_fixer_base_url: str = "http://localhost:8000/v1"
+    vuln_fixer_model_name: str = "vuln-fixer"
+    vuln_fixer_api_key: str = "none"
+    vuln_demo_file: str = "src/main/java/com/acme/payments/PaymentRepository.java"
+    vuln_demo_cwe: str = "CWE-89"
+
     # Observability (Slice 6). trace_mode picks the span sink: "memory" (default,
     # no deps -- powers the dashboard waterfall) or "otel" (memory + an
     # OpenTelemetry exporter). With otel, an empty otel_endpoint uses the console

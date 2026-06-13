@@ -167,4 +167,3 @@ scripts/run_skeleton.py
 tests/
 ```
 
-See `CLAUDE.md` for the full design context and build roadmap.

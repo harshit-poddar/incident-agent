@@ -9,28 +9,44 @@ from app.telemetry.metrics import ServiceMetrics, degraded, healthy
 class TelemetrySource(Protocol):
     """Where service metrics come from. The telemetry seam, like LLMClient and
     TelemetrySource's cousins: MockTelemetrySource (in-process, no deps) or
-    RedisTelemetrySource (ingest from an event queue)."""
+    RedisTelemetrySource (ingest from an event queue).
+
+    `ingest` is the producer side: a collector (or, in the demo, the live log
+    pipeline) publishes a metrics sample; `query_metrics` reads the latest."""
 
     def query_metrics(self, service: str) -> ServiceMetrics:
         ...
 
+    def ingest(self, metrics: ServiceMetrics) -> None:
+        ...
+
     def mark_recovered(self, service: str) -> None:
+        ...
+
+    def reset(self) -> None:
         ...
 
 
 class MockTelemetrySource:
-    """Offline source: a service reads as degraded until it is marked recovered
-    (which the supervisor does after a successful remediation). Drives the
-    golden-path verification with zero dependencies."""
+    """Offline source: holds the latest ingested sample per service in memory; a
+    service with no sample yet reads as degraded (i.e. an active incident). The
+    supervisor publishes a healthy sample after a successful remediation. Drives
+    the golden-path verification with zero dependencies."""
 
     def __init__(self) -> None:
-        self._recovered: set[str] = set()
+        self._latest: dict[str, ServiceMetrics] = {}
+
+    def ingest(self, metrics: ServiceMetrics) -> None:
+        self._latest[metrics.service] = metrics
 
     def mark_recovered(self, service: str) -> None:
-        self._recovered.add(service)
+        self.ingest(healthy(service))
 
     def query_metrics(self, service: str) -> ServiceMetrics:
-        return healthy(service) if service in self._recovered else degraded(service)
+        return self._latest.get(service) or degraded(service)
+
+    def reset(self) -> None:
+        self._latest.clear()
 
 
 def get_telemetry_source() -> TelemetrySource:

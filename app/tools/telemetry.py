@@ -15,5 +15,8 @@ class TelemetryTool:
     def query_metrics(self, service: str) -> ServiceMetrics:
         return self._source.query_metrics(service)
 
+    def ingest(self, metrics: ServiceMetrics) -> None:
+        self._source.ingest(metrics)
+
     def mark_recovered(self, service: str) -> None:
         self._source.mark_recovered(service)

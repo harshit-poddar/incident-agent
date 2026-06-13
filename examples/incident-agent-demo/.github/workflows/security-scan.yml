@@ -1,0 +1,38 @@
+name: security-scan
+
+# Deploy pipeline for the payments-api service. The build compiles, then a SAST
+# step scans the Java sources. The shipped code has a CWE-89 SQL injection, so
+# the scan FAILS the run. GitHub then fires a `workflow_run` (conclusion:
+# failure) webhook -> the incident agent picks it up, routes it to the
+# fine-tuned vuln-fixer, and opens a fix PR (after human approval).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Build payments-api
+        run: mvn -B -q compile
+
+      - name: Security scan (SAST)
+        run: python3 scripts/sast_scan.py src
+
+      - name: Deploy
+        if: success()
+        run: echo "deploying payments-api to sandbox cluster ..."

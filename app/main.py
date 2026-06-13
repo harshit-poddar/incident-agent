@@ -23,10 +23,16 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.agents.fixer import Fixer
+from app.agents.java_vuln_fixer import JavaVulnFixer
 from app.config import settings
 from app.github.client import get_github_client
 from app.github.schemas import WorkflowRun
-from app.github.webhook import parse_workflow_run, verify_signature
+from app.github.webhook import (
+    is_security_failure,
+    parse_sast_finding,
+    parse_workflow_run,
+    verify_signature,
+)
 from app.llm.factory import get_llm_client
 from app.obs.tracer import SpanRecord, get_tracer
 from app.orchestration.state import IncidentState, IncidentStatus
@@ -41,6 +47,7 @@ from app.tools.knowledge import KnowledgeTool
 from app.tools.remediation import MockCluster, RemediationExecutor
 from app.tools.schemas import ApprovalDecision
 from app.tools.telemetry import TelemetryTool
+from app.tools.vuln_fixer import CWE_DESCRIPTIONS, get_vuln_fixer_client
 
 # Statuses past the point of no return -- a service whose only incidents are all
 # in one of these is "closed", so a fresh signal should open a NEW incident.
@@ -91,26 +98,56 @@ def _build_supervisor() -> Supervisor:
     )
 
 
-def _open_ci_incident(run: WorkflowRun) -> IncidentState:
-    """Run the agent graph for a failed CI run: pull the run logs, detect,
-    diagnose, and have the Fixer propose a PR -- pausing at the approval gate.
-    The PR is opened (gated) only after a human approves in /approve."""
+def _open_incident_from_run(run: WorkflowRun) -> IncidentState:
+    """Run the agent graph for a failed GitHub workflow run, ROUTED by failure
+    type -- pull the run logs, detect, diagnose, and have the right specialist
+    planner propose a PR, pausing at the approval gate. The PR is opened (gated)
+    only after a human approves in /approve.
+
+      security-scan failure (CWE in a Java file) -> JavaVulnFixer (fine-tuned
+        'vuln-fixer' model); the CWE + file are parsed from the scan logs.
+      any other CI failure                       -> the generic Fixer."""
     github = get_github_client()
     logs = github.fetch_run_logs(run.repo, run.run_id)
-    signal = Signal(
-        service="payments-api",
-        metric="ci_failure",
-        value=1.0,
-        threshold=0.0,
-        message=f"workflow '{run.name}' failed on {run.head_branch}\n{logs[:500]}",
-    )
-    fixer = Fixer(github, run.repo, run.head_branch, settings.github_target_file)
+
+    if is_security_failure(run, logs):
+        cwe, target = parse_sast_finding(logs)
+        cwe = cwe or settings.vuln_demo_cwe
+        target = target or settings.vuln_demo_file
+        signal = Signal(
+            service="payments-api",
+            metric="security_scan",
+            value=1.0,
+            threshold=0.0,
+            message=(
+                f"workflow '{run.name}' failed on {run.head_branch}: SAST flagged "
+                f"{cwe} ({CWE_DESCRIPTIONS.get(cwe, cwe)}) in {target}\n{logs[:400]}"
+            ),
+        )
+        planner = JavaVulnFixer(
+            github=github,
+            vuln_fixer=get_vuln_fixer_client(),
+            repo=run.repo,
+            ref=run.head_branch,
+            file_path=target,
+            cwe=cwe,
+        ).plan
+    else:
+        signal = Signal(
+            service="payments-api",
+            metric="ci_failure",
+            value=1.0,
+            threshold=0.0,
+            message=f"workflow '{run.name}' failed on {run.head_branch}\n{logs[:500]}",
+        )
+        planner = Fixer(github, run.repo, run.head_branch, settings.github_target_file).plan
+
     supervisor = Supervisor(
         llm=get_llm_client(),
         knowledge=KnowledgeTool(),
         telemetry=TelemetryTool(),
         executor=RemediationExecutor(_CLUSTER, github),
-        planner_fn=fixer.plan,
+        planner_fn=planner,
     )
     _CLUSTER.register(signal.service)
     _CLUSTER.inject_fault(signal.service)
@@ -291,7 +328,7 @@ async def github_webhook(request: Request) -> dict:
     if existing is not None:
         return {"incident_id": existing, "deduped": True}
 
-    state = await asyncio.to_thread(_open_ci_incident, run)
+    state = await asyncio.to_thread(_open_incident_from_run, run)
     return {"incident_id": state.id, "status": state.status.value}
 
 
@@ -309,7 +346,26 @@ async def github_simulate() -> IncidentState:
         conclusion="failure",
         html_url=f"https://github.com/{settings.github_repo}/actions/runs/482",
     )
-    return await asyncio.to_thread(_open_ci_incident, run)
+    return await asyncio.to_thread(_open_incident_from_run, run)
+
+
+@app.post("/github/simulate-vuln")
+async def github_simulate_vuln() -> IncidentState:
+    """Offline stand-in for the incident-agent-demo `security-scan` job failing:
+    synthesise a failed `security-scan` run and drive the SAME routed webhook
+    path. The top agents detect/diagnose the Java CWE and route the fix to the
+    fine-tuned 'vuln-fixer' agent -> gate -> PR. Runs fully offline (mock), no
+    GPU, no network -- the bulletproof fallback if the demo runner/wifi is flaky."""
+    run = WorkflowRun(
+        run_id=915,
+        repo=settings.github_repo,
+        name="security-scan",
+        head_branch=settings.github_base_branch,
+        head_sha="b7e1d04",
+        conclusion="failure",
+        html_url=f"https://github.com/{settings.github_repo}/actions/runs/915",
+    )
+    return await asyncio.to_thread(_open_incident_from_run, run)
 
 
 @app.get("/telemetry/gpu")

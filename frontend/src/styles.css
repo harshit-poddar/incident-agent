@@ -79,14 +79,14 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 .btn-primary { background: linear-gradient(135deg, var(--acc), var(--acc2)); box-shadow: 0 8px 20px -10px var(--acc); }
 .btn-pipe { background: #123626; color: #8af2c4; border: 1px solid #1d5a3e; }
 .btn-gh { background: #1a1f29; color: #d6e2ff; border: 1px solid var(--line2); }
+.btn-sec { background: #2a1d10; color: #ffcf8f; border: 1px solid #5a3d1d; }
 .btn-ghost { background: var(--panel2); color: var(--mut); border: 1px solid var(--line); }
 .btn-approve { background: linear-gradient(135deg, #1fc88f, #25d6a0); color: #042b20; box-shadow: 0 8px 20px -10px var(--grn); }
 .btn-reject { background: #2a1418; color: #ff9aa6; border: 1px solid #5a2530; }
 
 /* ---------- grid ---------- */
-.grid { display: grid; grid-template-columns: 1fr 360px; gap: 20px; align-items: start; }
+.grid { display: grid; grid-template-columns: minmax(0, 860px); justify-content: center; gap: 20px; align-items: start; }
 .col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
-@media (max-width: 1080px) { .grid { grid-template-columns: 1fr; } }
 
 /* ---------- cards ---------- */
 .card {

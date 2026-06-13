@@ -16,3 +16,14 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     ports: ["6333:6333"]
+
+  # OpenTelemetry collector + UI (Slice 6). The agent ships spans to :4317
+  # (OTLP gRPC); open the waterfall/trace search UI at http://localhost:16686.
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC (set OTEL_ENDPOINT=localhost:4317)
+      - "4318:4318"     # OTLP HTTP

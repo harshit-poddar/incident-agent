@@ -8,6 +8,7 @@ from app.config import settings
 
 settings.github_mode = "mock"
 settings.github_webhook_secret = ""   # tests post unsigned payloads
+settings.vuln_fixer_mode = "mock"     # never hit the fine-tuned endpoint in tests
 settings.model_mode = "mock"
 settings.store_mode = "memory"
 settings.telemetry_mode = "mock"

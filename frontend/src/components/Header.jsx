@@ -1,6 +1,6 @@
-import { Play, Github, Zap, RotateCcw } from 'lucide-react'
+import { Play, Github, Zap, RotateCcw, ShieldAlert } from 'lucide-react'
 
-export default function Header({ onPipeline, onSimulate, onTrigger, onReset, streaming, busy }) {
+export default function Header({ onPipeline, onSimulate, onSimulateVuln, onTrigger, onReset, streaming, busy }) {
   return (
     <div className="topbar">
       <div className="brand">
@@ -18,6 +18,9 @@ export default function Header({ onPipeline, onSimulate, onTrigger, onReset, str
         </button>
         <button className="btn-gh" onClick={onSimulate} disabled={busy}>
           <Github size={15} /> Simulate CI failure
+        </button>
+        <button className="btn-sec" onClick={onSimulateVuln} disabled={busy}>
+          <ShieldAlert size={15} /> Security scan fail
         </button>
         <button className="btn-primary" onClick={onTrigger} disabled={busy}>
           <Zap size={15} /> Trigger incident

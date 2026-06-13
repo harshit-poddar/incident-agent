@@ -21,10 +21,16 @@ class RedisTelemetrySource:
     def _stream(self, service: str) -> str:
         return f"telemetry:{service}"
 
+    def ingest(self, metrics: ServiceMetrics) -> None:
+        # Publish a metrics sample onto the service's stream (the producer side
+        # of the event queue). The demo's live log pipeline calls this as memory
+        # climbs, so the dashboard reads the degradation straight out of Redis.
+        self._redis.xadd(self._stream(metrics.service), {"data": metrics.model_dump_json()})
+
     def mark_recovered(self, service: str) -> None:
         from app.telemetry.metrics import healthy
 
-        self._redis.xadd(self._stream(service), {"data": healthy(service).model_dump_json()})
+        self.ingest(healthy(service))
 
     def query_metrics(self, service: str) -> ServiceMetrics:
         entries = self._redis.xrevrange(self._stream(service), count=1)
